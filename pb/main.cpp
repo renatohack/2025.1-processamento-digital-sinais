@@ -1,71 +1,53 @@
-// INIT
+#include <Arduino.h>
 
-// include
-#include <Adafruit_LiquidCrystal.h>
-
-// define
-#define POT_PIN_0 A0
-#define POT_PIN_1 A1
-#define POT_PIN_2 A2
-
+#define MIC_PIN A0
 #define BUTTON_DISPLAY_PIN 4
 #define BUTTON_COLETA_PIN 2
 
 #define PI 3.14159265358979323846
-#define NUM_AMOSTRAS 128
+#define NUM_AMOSTRAS 256
 
-// variáveis
 bool lastButtonStateDisplay = HIGH;
 bool lastButtonStateColeta = HIGH;
 bool toggleState = false;
+
+float tempoTotalAmostra = 0.256;  // f_s = 1000 Hz
+float threshold = 15;  // Ajuste conforme a escala dos int16
+float frequenciaAmostragem;
+float deltaFrequencia;
+
+int16_t amostras[NUM_AMOSTRAS];
+int16_t magnitudes[NUM_AMOSTRAS];
 
 float freqDominant = 0.0;
 float ampDominant = 0.0;
 float freqMax = 0.0;
 float ampMax = 0.0;
 
-float tempoTotalAmostra = 1;
-float threshold = 0.2;
-float amostras[NUM_AMOSTRAS];
-float frequenciaAmostragem;
-float deltaFrequencia;
-
-Adafruit_LiquidCrystal lcd_1(0);
-
-// SETUP
 void setup() {
-  lcd_1.begin(24, 2);
-  lcd_1.setBacklight(1);
-
   Serial.begin(9600);
-
   pinMode(BUTTON_DISPLAY_PIN, INPUT_PULLUP);
   pinMode(BUTTON_COLETA_PIN, INPUT_PULLUP);
-  
-  frequenciaAmostragem = NUM_AMOSTRAS / tempoTotalAmostra;
-  deltaFrequencia = frequenciaAmostragem / NUM_AMOSTRAS;
+
+  frequenciaAmostragem = NUM_AMOSTRAS / tempoTotalAmostra;  // 1000 Hz
+  deltaFrequencia = frequenciaAmostragem / NUM_AMOSTRAS;    // ~3.9 Hz
 }
 
-// LOOP
 void loop() {
   if (checkButtonToggle(BUTTON_COLETA_PIN, lastButtonStateColeta)) {
-    lcd_1.clear();
-    lcd_1.setCursor(0, 0);
-    lcd_1.print("Calculando...");
+    Serial.println("Capturando e processando...");
     coletarEProcessar();
-    atualizarDisplay(toggleState, freqDominant, ampDominant, freqMax, ampMax);
+    atualizarDisplay();
   }
 
   if (checkButtonToggle(BUTTON_DISPLAY_PIN, lastButtonStateDisplay)) {
     toggleState = !toggleState;
-    atualizarDisplay(toggleState, freqDominant, ampDominant, freqMax, ampMax);
+    atualizarDisplay();
   }
 
   delay(50);
 }
 
-
-// AUX FUNCTIONS
 bool checkButtonToggle(int buttonPin, bool &lastButtonState) {
   bool currentButtonState = digitalRead(buttonPin);
   bool toggled = false;
@@ -73,81 +55,42 @@ bool checkButtonToggle(int buttonPin, bool &lastButtonState) {
   if (currentButtonState == LOW && lastButtonState == HIGH) {
     toggled = true;
   }
-  
+
   lastButtonState = currentButtonState;
   return toggled;
 }
 
-
-void atualizarDisplay(bool toggleState, float freqDominant, float ampDominant, float freqMax, float ampMax) {
-  lcd_1.clear();
-  showDisplay(toggleState, freqDominant, ampDominant, freqMax, ampMax);
-}
-
-
-void showDisplay(bool toggleState, float freqDominant, float ampDominant, float freqMax, float ampMax) {
-  lcd_1.setCursor(0, 0);
-
+void atualizarDisplay() {
   if (!toggleState) {
-    lcd_1.print("F_dom");
-    lcd_1.setCursor(0, 1);
-    printFreqAmp(freqDominant, ampDominant);
+    Serial.print("Frequencia dominante: ");
+    Serial.print(freqDominant, 1);
+    Serial.print(" Hz | Amplitude: ");
+    Serial.println(ampDominant, 2);
   } else {
-    lcd_1.print("F_max");
-    lcd_1.setCursor(0, 1);
-    printFreqAmp(freqMax, ampMax);
+    Serial.print("Frequencia maxima acima do threshold: ");
+    Serial.print(freqMax, 1);
+    Serial.print(" Hz | Amplitude: ");
+    Serial.println(ampMax, 2);
   }
-}
-
-
-
-void printFreqAmp(float freq, float amp) {
-  lcd_1.print("F ");
-  String freqStr = String(freq, 1);
-  lcd_1.print(freqStr);
-  lcd_1.print(" A ");
-  String ampStr = String(amp, 2);
-  lcd_1.print(ampStr);
 }
 
 void coletarEProcessar() {
-  float valorPot0 = analogRead(POT_PIN_0) * (30.0 / 1023.0);
-  float valorPot1 = analogRead(POT_PIN_1) * (30.0 / 1023.0);
-  float valorPot2 = analogRead(POT_PIN_2) * (30.0 / 1023.0);
-
-  generateSample(valorPot0, valorPot1, valorPot2, NUM_AMOSTRAS, amostras);
-
-  static float magnitudes[NUM_AMOSTRAS];
-  
+  capturarSinalReal(MIC_PIN, NUM_AMOSTRAS, tempoTotalAmostra, amostras);
   calcularDFT(amostras, magnitudes, NUM_AMOSTRAS);
-
-  
   extrairResultados(magnitudes, NUM_AMOSTRAS, threshold, &freqDominant, &ampDominant, &freqMax, &ampMax);
 }
 
+void capturarSinalReal(int pin, int numAmostras, float tempoTotal, int16_t* buffer) {
+  unsigned long tempoPorAmostra = (tempoTotal * 1e6) / numAmostras;
+  unsigned long t0 = micros();
 
-void generateSample(float valorPot0, float valorPot1, float valorPot2, int numAmostras, float* vetorAmostras) {
-  float freq1 = valorPot0;
-  float freq2 = valorPot1;
-  float freq3 = valorPot2;
-  
-  float amp1 = random(20, 101) / 100.0;
-  float amp2 = random(20, 101) / 100.0;
-  float amp3 = random(20, 101) / 100.0;
-  
-  float tempoPorAmostra = tempoTotalAmostra / numAmostras;
-
-  for (int n = 0; n < numAmostras; n++) {
-    float t = n * tempoPorAmostra;
-
-    vetorAmostras[n] = 
-      amp1 * sin(2 * PI * freq1 * t) + 
-      amp2 * sin(2 * PI * freq2 * t) + 
-      amp3 * sin(2 * PI * freq3 * t);
+  for (int i = 0; i < numAmostras; i++) {
+    buffer[i] = analogRead(pin) - 512;
+    while (micros() - t0 < tempoPorAmostra * (i + 1));
   }
 }
 
-void calcularDFT(float* amostras, float* magnitudes, int numAmostras) {
+void calcularDFT(int16_t* amostras, int16_t* magnitudes, int numAmostras) {
   for (int k = 0; k < numAmostras; k++) {
     float real = 0;
     float imag = 0;
@@ -158,29 +101,43 @@ void calcularDFT(float* amostras, float* magnitudes, int numAmostras) {
       imag -= amostras[n] * sin(angle);
     }
 
-    magnitudes[k] = sqrt(real * real + imag * imag) / numAmostras;
+    float magnitude = sqrt(real * real + imag * imag) / numAmostras;
+    magnitudes[k] = (int16_t)magnitude;
   }
 }
 
-
-void extrairResultados(float* magnitudes, int numAmostras, float threshold, float* freqDominant, float* ampDominant, float* freqMax, float* ampMax) {
+void extrairResultados(int16_t* magnitudes, int numAmostras, float thresholdManual, float* freqDominant, float* ampDominant, float* freqMax, float* ampMax) {
   float maiorAmp = 0;
   int indiceMaiorAmp = 0;
 
   int indiceMaiorFreq = -1;
   float ampMaiorFreq = 0;
 
-  for (int k = 0; k < numAmostras / 2; k++) { // analisar apenas metade (por simetria)
+  // Faixa de análise (em bins)
+  int binMin = ceil(80.0 / deltaFrequencia);   // Ex: 80 Hz
+  int binMax = floor(300.0 / deltaFrequencia); // Ex: 300 Hz
+
+  // Cálculo da média para threshold dinâmico
+  float media = 0;
+  int count = 0;
+  for (int k = binMin; k <= binMax; k++) {
+    media += magnitudes[k];
+    count++;
+  }
+  media = (count > 0) ? media / count : 0;
+
+  float threshold = max(media * 1.5, thresholdManual);  // threshold dinâmico com mínimo manual
+
+  // Análise da faixa útil
+  for (int k = binMin; k <= binMax; k++) {
     if (magnitudes[k] > maiorAmp) {
       maiorAmp = magnitudes[k];
       indiceMaiorAmp = k;
     }
 
-    if (magnitudes[k] > threshold) {
-      if (k > indiceMaiorFreq) {
-        indiceMaiorFreq = k;
-        ampMaiorFreq = magnitudes[k];
-      }
+    if (magnitudes[k] > threshold && k > indiceMaiorFreq) {
+      indiceMaiorFreq = k;
+      ampMaiorFreq = magnitudes[k];
     }
   }
 
@@ -188,10 +145,11 @@ void extrairResultados(float* magnitudes, int numAmostras, float threshold, floa
   *ampDominant = maiorAmp;
 
   if (indiceMaiorFreq >= 0) {
-    *freqMax = indiceMaiorFreq * deltaFrequencia; 
+    *freqMax = indiceMaiorFreq * deltaFrequencia;
     *ampMax = ampMaiorFreq;
   } else {
     *freqMax = 0;
     *ampMax = 0;
   }
 }
+
