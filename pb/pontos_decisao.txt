@@ -60,3 +60,7 @@ Impacto: Permite visualizar os dois indicadores principais do espectro de forma 
 Resumo Geral:
 -------------
 Essas decisões equilibram precisão, robustez contra ruído, e limitação de hardware. Com isso, o sistema identifica com boa confiabilidade a frequência dominante da voz e a frequência mais alta acima de um nível mínimo de energia.
+
+Gabarito utilizado:
+------------------
+https://www.onlinemictest.com/tuners/pitch-detector/
