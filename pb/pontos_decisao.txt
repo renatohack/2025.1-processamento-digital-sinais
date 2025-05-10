@@ -1,0 +1,62 @@
+Analisador Espectral com DFT - Pontos de Decisão e Justificativas Técnicas
+
+1. Tamanho do vetor de amostras (NUM_AMOSTRAS = 256)
+----------------------------------------------------
+Escolhemos 256 amostras para equilibrar resolução espectral (~3.9 Hz por bin) e uso de memória (RAM).
+Com float seria inviável no Arduino Uno, por isso usamos int16_t para economizar memória.
+
+Impacto: Permite captar frequências até 500 Hz com boa precisão, cobrindo bem a voz humana.
+
+2. Tempo total de amostragem (tempoTotalAmostra = 0.256s)
+----------------------------------------------------------
+Definido para garantir frequência de amostragem f_s = 1000 Hz.
+Garante Δf = 1000 / 256 ≈ 3.9 Hz por bin, o que oferece boa resolução para identificar frequências vocais.
+
+Impacto: Frequências até 500 Hz podem ser medidas com segurança, sem aliasing.
+
+3. Coleta com tempo fixo entre amostras (usando micros())
+----------------------------------------------------------
+Calcula tempo entre amostras com: tempoPorAmostra = (tempoTotal * 1e6) / numAmostras
+Garante que as leituras sejam feitas com espaçamento temporal constante.
+
+Impacto: Fundamental para garantir que o eixo de frequência da DFT esteja correto.
+
+4. Centralização do sinal (analogRead - 512)
+--------------------------------------------
+Como o sinal do microfone é centrado em 2.5V, subtrai-se 512 para centralizar em torno de zero.
+
+Impacto: Remove componente DC (bin 0), evita distorções e melhora leitura da DFT.
+
+5. DFT implementada manualmente
+-------------------------------
+Usamos a DFT direta (duplo for) para manter o controle do código e evitar dependências externas.
+
+Impacto: Código mais didático e flexível, embora mais lento (O(N²)).
+
+6. Filtro de faixa de frequência (80 Hz a 300 Hz)
+-------------------------------------------------
+Limitamos a busca de frequência dominante e máxima apenas na faixa da voz humana.
+
+Impacto: Elimina ruídos fora da faixa vocal, reduz falsos positivos e melhora precisão.
+
+7. Threshold dinâmico baseado na média das magnitudes
+------------------------------------------------------
+Calculamos a média das magnitudes dentro da faixa útil e usamos como threshold dinâmico (1.5x média).
+
+Impacto: Permite que o sistema se adapte automaticamente ao nível de ruído ambiente.
+
+8. Uso de int16_t no lugar de float
+-----------------------------------
+Troca dos vetores de amostras e magnitudes para int16_t, reduzindo o consumo de memória pela metade.
+
+Impacto: Viabiliza trabalhar com 256 amostras em um Arduino Uno (limite de RAM 2048 bytes).
+
+9. Exibição no Serial Monitor com alternância via botão
+--------------------------------------------------------
+O botão D4 alterna entre exibir a frequência dominante e a frequência máxima acima do threshold.
+
+Impacto: Permite visualizar os dois indicadores principais do espectro de forma simples e interativa.
+
+Resumo Geral:
+-------------
+Essas decisões equilibram precisão, robustez contra ruído, e limitação de hardware. Com isso, o sistema identifica com boa confiabilidade a frequência dominante da voz e a frequência mais alta acima de um nível mínimo de energia.
