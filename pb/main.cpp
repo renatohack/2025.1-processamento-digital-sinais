@@ -12,7 +12,7 @@ bool lastButtonStateColeta = HIGH;
 bool toggleState = false;
 
 float tempoTotalAmostra = 0.256;  // f_s = 1000 Hz
-float threshold = 15;  // Ajuste conforme a escala dos int16
+float threshold = 5;  // Ajuste conforme a escala dos int16
 float frequenciaAmostragem;
 float deltaFrequencia;
 
